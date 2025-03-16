@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Лог-файл
-LOG_FILE="/var/log/mylog.log"
+LOG_FILE="/var/log/script.log"
 
 # Проверяем, что скрипт запущен от имени root
 if [ "$EUID" -ne 0 ]; then
@@ -9,17 +9,21 @@ if [ "$EUID" -ne 0 ]; then
   exit 1
 fi
 
-echo "Конфигурируем /etc/network/interfaces"
+echo "==== Начало работы скрипта ===="
+
+# === Логирование первой части ===
+echo "==== Начало первой части скрипта ===="
+
+echo "Конфигурируем сеть..."
 {
   # Конфигурация сети
   cat > /etc/network/interfaces <<EOL
 source /etc/network/interfaces.d/*
 
-# Локальная сеть
 auto lo
 iface lo inet loopback
 
-# Интерфейс для подключения к Интернету
+# Основной интерфейс для подключения к сети
 allow-hotplug enp0s3
 iface enp0s3 inet dhcp
 
@@ -36,30 +40,30 @@ EOL
   ifup enp0s8
 } >> "$LOG_FILE" 2>&1
 
-echo "Устанавливаем iptables и зависимости"
+echo "Устанавливаем iptables и зависимости..."
 {
   apt-get install iptables-persistent netfilter-persistent gcc -y
 } >> "$LOG_FILE" 2>&1
 
-echo "Добавляем правило для NAT"
+echo "Добавляем правило NAT..."
 {
   iptables -t nat -A POSTROUTING -o enp0s3 -j MASQUERADE
   iptables-save
   netfilter-persistent save
 } >> "$LOG_FILE" 2>&1
 
-echo "Включаем перенаправление"
+echo "Включаем IP форвардинг..."
 {
   sysctl -w net.ipv4.ip_forward="1"
   sysctl -p
 } >> "$LOG_FILE" 2>&1
 
-echo "Настраиваем DNS"
+echo "Настраиваем DNS..."
 {
   apt install -y bind9 bind9utils swaks
 } >> "$LOG_FILE" 2>&1
 
-echo "Разворачивам DHCP сервер"
+echo "Устанавливаем DHCP сервер..."
 {
   DEBIAN_FRONTEND=noninteractive apt install -y isc-dhcp-server
   if [ $? -ne 0 ]; then
@@ -69,7 +73,7 @@ echo "Разворачивам DHCP сервер"
   fi
 } >> "$LOG_FILE" 2>&1
 
-echo "Конфигурируем /etc/default/isc-dhcp-server"
+echo "Конфигурируем DHCP..."
 {
   cat > /etc/default/isc-dhcp-server <<EOL
 INTERFACESv4="enp0s8"
@@ -96,10 +100,16 @@ echo "Запускаем DHCP-сервер..."
   /etc/init.d/isc-dhcp-server start
 } >> "$LOG_FILE" 2>&1
 
-echo "Логирование сохранено в $LOG_FILE"
+echo "==== Завершение первой части скрипта ===="
+echo "Первая часть завершена. Лог сохранён в $LOG_FILE"
+
+echo "Переход ко второй части..."
+
+# === Часть 2 ===
+echo "==== Начало второй части скрипта ===="
 
 # Задание по созданию программы на C
-echo "Создаем исполняемый файл app"
+echo "Компилируем программу на C..."
 gcc -o app lab1.c
 chmod +x app
 
@@ -107,5 +117,7 @@ chmod +x app
 read -p "Введите первое число: " num1
 read -p "Введите второе число: " num2
 
-# Запуск программы 
+# Запуск программы с забранными значениями
 ./app $num1 $num2
+
+echo "==== Завершение скрипта ===="
